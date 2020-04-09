@@ -7,7 +7,7 @@ in Django.
 
 Let's say you have the following in your Django settings.py
 
-    TIME_ZONE = 'EST'
+    TIME_ZONE = 'America/New_York'
     USE_TZ = True
 
 Now let's attempt to write our own tomorrow() function.
@@ -30,6 +30,6 @@ Here's one way to fix the problem.
 
     def tomorrow():
       # djavedt's now() function returns a timezone enabled datetime in the
-      # timezone of the TIME_ZONE setting, which is EST in our example. So this
-      # function will work as expected at 11PM in New York.
+      # timezone of the TIME_ZONE setting, which is America/New_York in our example.
+      # So this function will work as expected at 11PM in New York.
       return now().date() + timedelta(days=1)
