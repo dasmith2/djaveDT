@@ -10,12 +10,15 @@ from django.utils.dateparse import parse_datetime, parse_date
 from django.utils.timezone import make_aware, is_aware, now as django_now
 
 
-def tz_dt_to_str(tz_dt, tz_str=settings.TIME_ZONE):
+def tz_dt_to_str(tz_dt, tz_str=None):
   """ Turn tz_dt into a human readable string. For example, Jan. 10, 2019, 8:18
   a.m.  I just reverse engineered Django's formula for turning datetimes into
   readable strings. """
-  if tz_str:
-    tz_dt = tz_dt_to_tz_dt(tz_dt, tz_str)
+  # I do it this way because if you do def tz_dt_to_str(tz_dt,
+  # tz_str=settings.TIME_ZONE) the tests would require a full blown Django
+  # instance.
+  tz_str = tz_str or settings.TIME_ZONE
+  tz_dt = tz_dt_to_tz_dt(tz_dt, tz_str)
   return dt_to_str(tz_dt)
 
 
@@ -47,7 +50,8 @@ def dt_to_time_str(tz_dt):
   return ''.join(join_me)
 
 
-def tz_dt_to_abbr_str(tz_dt, tz_str=settings.TIME_ZONE):
+def tz_dt_to_abbr_str(tz_dt, tz_str=None):
+  tz_str = tz_str or settings.TIME_ZONE
   return tz_dt_to_tz_dt(tz_dt, tz_str).strftime('%Y-%m-%d %H:%M EST')
 
 
@@ -84,23 +88,25 @@ def str_to_naive_dt(dt_str):
   raise Exception('Unable to parse date string {}'.format(dt_str))
 
 
-def str_to_tz_dt(dt_str, tz_str=settings.TIME_ZONE):
+def str_to_tz_dt(dt_str, tz_str=None):
   """ dt_str is, like, "2012-02-21 10:28:45" while tz_str is, like,
   "Europe/Helsinki". See pytz.all_timezones. This function returns
   something like datetime.datetime(
       2012, 2, 21, 10, 28, 45,
       tzinfo=<DstTzInfo 'Europe/Helsinki' EET+2:00:00 STD>)
   dt_str can also be, like, "2012-02-21" which will just do midnight. """
+  tz_str = tz_str or settings.TIME_ZONE
   return naive_dt_to_tz_dt(str_to_naive_dt(dt_str), tz_str)
 
 
-def naive_dt_to_tz_dt(naive, tz_str=settings.TIME_ZONE):
+def naive_dt_to_tz_dt(naive, tz_str=None):
   # I THINK is_dst is is daylight savings time and is only used in weird corner
   # cases.
+  tz_str = tz_str or settings.TIME_ZONE
   return pytz.timezone(tz_str).localize(naive, is_dst=None)
 
 
-def tz_dt_to_tz_dt(tz_dt, tz_str=settings.TIME_ZONE):
+def tz_dt_to_tz_dt(tz_dt, tz_str=None):
   """ Take a timezone aware datetime that's localized to UTC (or whatever,
   but Django stores and loads datetimes in the database in UTC so that's
   pretty much the use case). Let's say tz_dt is noon on Friday UTC. Let's
@@ -109,44 +115,45 @@ def tz_dt_to_tz_dt(tz_dt, tz_str=settings.TIME_ZONE):
   do my_dt.replace(hour=9), it'll do UTC 9am if my_dt is still in UTC, but
   that might be in the middle of the night if what you wanted to do was
   send something at 9am in Hawaii or whatever. """
+  tz_str = tz_str or settings.TIME_ZONE
   return tz_dt.astimezone(pytz.timezone(tz_str))
 
 
-def now():
+def now(use_django_now=django_now, tz_str=None):
   # django_now is in UTC, so things like now().date() can return tomorrow if
-  # you call it past 7pm.
-  return tz_dt_to_tz_dt(django_now())
+  # you call it past 7pm. use_django_now is there so I can write tests without
+  # requiring Django.
+  tz_str = tz_str or settings.TIME_ZONE
+  return tz_dt_to_tz_dt(use_django_now(), tz_str)
 
 
-def default_tzinfo():
-  return pytz.timezone(settings.TIME_ZONE)
+def default_tzinfo(tz_str=None):
+  tz_str = tz_str or settings.TIME_ZONE
+  return pytz.timezone(tz_str)
 
 
 def midnight_from_date(date_, tzinfo=None):
   tzinfo = tzinfo or default_tzinfo()
-  return datetime(
-      year=date_.year, month=date_.month, day=date_.day, tzinfo=tzinfo)
+  return tzinfo.localize(datetime(
+      year=date_.year, month=date_.month, day=date_.day))
 
 
 def morning_from_date(date_, tzinfo=None):
   tzinfo = tzinfo or default_tzinfo()
-  return datetime(
-      year=date_.year, month=date_.month, day=date_.day, hour=11,
-      tzinfo=tzinfo)
+  return tzinfo.localize(datetime(
+      year=date_.year, month=date_.month, day=date_.day, hour=11))
 
 
 def afternoon_from_date(date_, tzinfo=None):
   tzinfo = tzinfo or default_tzinfo()
-  return datetime(
-      year=date_.year, month=date_.month, day=date_.day, hour=16,
-      tzinfo=tzinfo)
+  return tzinfo.localize(datetime(
+      year=date_.year, month=date_.month, day=date_.day, hour=16))
 
 
 def time_of_day_from_date(date_, hour, tzinfo=None):
   tzinfo = tzinfo or default_tzinfo()
-  return datetime(
-      year=date_.year, month=date_.month, day=date_.day, hour=hour,
-      tzinfo=tzinfo)
+  return tzinfo.localize(datetime(
+      year=date_.year, month=date_.month, day=date_.day, hour=hour))
 
 
 def closest_previous_sunday(date_):
@@ -170,8 +177,7 @@ def closest_upcoming_first_of_the_month(date_):
 
 def tz_dt(year, month, day, hour, tzinfo=None):
   tzinfo = tzinfo or default_tzinfo()
-  return datetime(
-      year=year, month=month, day=day, hour=hour, tzinfo=tzinfo)
+  return tzinfo.localize(datetime(year=year, month=month, day=day, hour=hour))
 
 
 def ts_to_utc_dt(time_stamp):
