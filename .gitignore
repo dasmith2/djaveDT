@@ -1,2 +1,4 @@
 *.swp
 djavedt.egg-info
+build
+dist
