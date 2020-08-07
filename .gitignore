@@ -1,4 +1,2 @@
+__pycache__
 *.swp
-djavedt.egg-info
-build
-dist
