@@ -22,31 +22,44 @@ def tz_dt_to_str(tz_dt, tz_str=None):
   return dt_to_str(tz_dt)
 
 
+def d_to_str(d):
+  # I don't do '%b. %d, %Y' because "May. 5, 2020" looks dumb.
+  return d.strftime('%b %d, %Y')
+
+
 def dt_to_str(tz_dt):
   return ''.join([dt_to_date_str(tz_dt), ', ', dt_to_time_str(tz_dt)])
 
 
+def dt_to_d_str(tz_dt, tz_str=None):
+  return d_to_str(tz_dt_to_tz_dt(tz_dt, tz_str=tz_str))
+
+
 def dt_to_date_str(tz_dt):
-  return tz_dt.strftime('%b. %d, %Y')
+  return d_to_str(tz_dt.date())
 
 
-def dt_to_time_str(tz_dt):
+def dt_to_time_str(tz_dt, tz_str=None):
+  return time_to_time_str(tz_dt_to_tz_dt(tz_dt, tz_str=tz_str).time())
+
+
+def time_to_time_str(t):
   join_me = []
   minute_str = ''
-  if tz_dt.minute > 0:
-    if tz_dt.minute >= 10:
-      minute_str = ':{}'.format(tz_dt.minute)
+  if t.minute > 0:
+    if t.minute >= 10:
+      minute_str = ':{}'.format(t.minute)
     else:
-      minute_str = ':0{}'.format(tz_dt.minute)
-  if tz_dt.hour < 12:
-    join_me.extend([str(tz_dt.hour), minute_str, ' a.m.'])
-  elif tz_dt.hour == 12:
-    if tz_dt.minute == 0:
+      minute_str = ':0{}'.format(t.minute)
+  if t.hour < 12:
+    join_me.extend([str(t.hour), minute_str, ' a.m.'])
+  elif t.hour == 12:
+    if t.minute == 0:
       join_me.append('noon')
     else:
-      join_me.extend([str(tz_dt.hour), minute_str, ' p.m.'])
+      join_me.extend([str(t.hour), minute_str, ' p.m.'])
   else:
-    join_me.extend([str(tz_dt.hour - 12), minute_str, ' p.m.'])
+    join_me.extend([str(t.hour - 12), minute_str, ' p.m.'])
   return ''.join(join_me)
 
 
@@ -78,7 +91,9 @@ def parse_dt(dt_maybe):
   return make_aware(dt_definitely)
 
 
-def str_to_naive_dt(dt_str):
+def str_to_dt(dt_str):
+  """ If the string contains timezone information, this will return a timezone
+  aware datetime. """
   parsed_as_dt = parse_datetime(dt_str)
   if parsed_as_dt:
     return parsed_as_dt
@@ -88,6 +103,32 @@ def str_to_naive_dt(dt_str):
   raise Exception('Unable to parse date string {}'.format(dt_str))
 
 
+def to_d(d_or_d_str):
+  """ d_or_d_str can be None, a string like '2012-02-21' or a date. """
+  if d_or_d_str is None:
+    return None
+  if isinstance(d_or_d_str, str):
+    return parse_date(d_or_d_str)
+  if isinstance(d_or_d_str, date):
+    return d_or_d_str
+  raise Exception(
+      'Im not sure what to do with a {}'.format(d_or_d_str.__class__))
+
+
+def to_tz_dt(dt_or_dt_str, tz_str=None):
+  """ dt_or_dt_str can be None, a string like "2012-02-21 10:28:45", or a
+  timezone enabled datetime. This returns in the tz_str timezone if provided,
+  otherwise it uses settings.TIME_ZONE """
+  if dt_or_dt_str is None:
+    return None
+  if isinstance(dt_or_dt_str, str):
+    return str_to_tz_dt(dt_or_dt_str, tz_str=tz_str)
+  elif isinstance(dt_or_dt_str, datetime):
+    return tz_dt_to_tz_dt(dt_or_dt_str)
+  raise Exception('I am not sure what to do with a {}'.format(
+      dt_or_dt_str.__class__))
+
+
 def str_to_tz_dt(dt_str, tz_str=None):
   """ dt_str is, like, "2012-02-21 10:28:45" while tz_str is, like,
   "Europe/Helsinki". See pytz.all_timezones. This function returns
@@ -95,15 +136,38 @@ def str_to_tz_dt(dt_str, tz_str=None):
       2012, 2, 21, 10, 28, 45,
       tzinfo=<DstTzInfo 'Europe/Helsinki' EET+2:00:00 STD>)
   dt_str can also be, like, "2012-02-21" which will just do midnight. """
+  if not isinstance(dt_str, str):
+    raise Exception(
+        'str_to_tz_dt expects a string, not a {}'.format(dt_str.__class__))
+  dt = str_to_dt(dt_str)
+  if dt.tzinfo:
+    if not tz_str:
+      return dt
+    return tz_dt_to_tz_dt(dt, tz_str=tz_str)
   tz_str = tz_str or settings.TIME_ZONE
-  return naive_dt_to_tz_dt(str_to_naive_dt(dt_str), tz_str)
+  return naive_dt_to_tz_dt(dt, tz_str)
+
+
+def d_to_naive_dt(d):
+  return datetime(d.year, d.month, d.day)
 
 
 def naive_dt_to_tz_dt(naive, tz_str=None):
-  # I THINK is_dst is is daylight savings time and is only used in weird corner
+  # If you hand this thing noon it'll return noon in New York or whatever. I
+  # THINK is_dst is is daylight savings time and is only used in weird corner
   # cases.
   tz_str = tz_str or settings.TIME_ZONE
   return pytz.timezone(tz_str).localize(naive, is_dst=None)
+
+
+def beginning_of_day(d, tz_str=None):
+  """ Given a plain old date, this will return the beginning of that day in
+  New York time or whatever. """
+  return naive_dt_to_tz_dt(d_to_naive_dt(d), tz_str=tz_str)
+
+
+def end_of_day(d, tz_str=None):
+  return beginning_of_day(d, tz_str=tz_str) + timedelta(days=1)
 
 
 def tz_dt_to_tz_dt(tz_dt, tz_str=None):
@@ -117,6 +181,28 @@ def tz_dt_to_tz_dt(tz_dt, tz_str=None):
   send something at 9am in Hawaii or whatever. """
   tz_str = tz_str or settings.TIME_ZONE
   return tz_dt.astimezone(pytz.timezone(tz_str))
+
+
+def dt_for_json(tz_dt, tz_str=None):
+  """ If tz_dt is None, return None. Otherwise, put tz_dt in the specified
+  timezone. If no timezone is specified, use settings.TIME_ZONE (which for me
+  is 'America/New_York'). Return the isoformat. So for instance this could
+  return '2020-01-01T13:00:00-05:00' """
+  if not tz_dt:
+    return None
+  if not isinstance(tz_dt, datetime):
+    raise Exception((
+        'dt_for_json expects a timezone enabled datetime, '
+        'not a {}').format(tz_dt.__class__))
+  return tz_dt_to_tz_dt(tz_dt).isoformat()
+
+
+def d_for_json(d):
+  if not d:
+    return None
+  if not isinstance(d, date):
+    raise Exception('d_for_json expects a date, not a {}'.format(d.__class__))
+  return d.isoformat()
 
 
 def now(use_django_now=django_now, tz_str=None):
@@ -207,17 +293,21 @@ def get_readable_duration(ttimedelta):
       parts.append('day')
     else:
       parts.append('days')
-  seconds = ttimedelta.seconds
-  if seconds == 0:
+  total_seconds = ttimedelta.seconds
+  if total_seconds == 0:
     return '0 seconds'
-  hours = math.floor(seconds / 3600)
-  minutes = round((seconds % 3600) / 60)
+  hours = math.floor(total_seconds / 3600)
+  minutes = round((total_seconds % 3600) / 60)
+  seconds = total_seconds % 60
   if hours > 0:
     parts.append(str(hours))
-    parts.append('hours' if hours != 1 else 'hour')
+    parts.append('hour' if hours == 1 else 'hours')
   if minutes > 0:
     parts.append(str(minutes))
-    parts.append('minutes' if minutes != 1 else 'minute')
+    parts.append('minute' if minutes == 1 else 'minutes')
+  if seconds > 0:
+    parts.append(str(seconds))
+    parts.append('second' if seconds == 1 else 'seconds')
   return ' '.join(parts)
 
 
@@ -260,6 +350,25 @@ def years_old(birthdate, nnow=None):
       today.month == birthdate.month and today.day < birthdate.day):
     return year_delta - 1
   return year_delta
+
+
+def days_ago_str(day):
+  start = ''
+  middle = day.strftime('%A, %B %d')  # Monday, January 17
+  end = ''
+  if day == date.today():
+    start = 'Today, '
+  elif day == date.today() - timedelta(days=1):
+    start = 'Yesterday, '
+  elif day == date.today() + timedelta(days=1):
+    start = 'Tomorrow, '
+  elif day < date.today():
+    days_ago = (date.today() - day).days
+    end = ', {} days ago'.format(days_ago)
+  elif day > date.today():
+    days_until = (day - date.today()).days
+    end = ', {} days from now'.format(days_until)
+  return '{}{}{}'.format(start, middle, end)
 
 
 def time_str_to_time(time_str):
